@@ -1,0 +1,5 @@
+gom 'github.com/gin-gonic/gin'
+gom 'github.com/boltdb/bolt'
+gom 'gopkg.in/redis.v4'
+gom 'gopkg.in/mgo.v2'
+gom 'github.com/ryanuber/go-glob'
