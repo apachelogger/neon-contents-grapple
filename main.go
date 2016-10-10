@@ -119,6 +119,8 @@ func main() {
 		return
 	}
 
+	fmt.Println("Ready to rumble...")
+
 	router := gin.Default()
 	router.GET("/v1/archives", v1_archives)
 	router.GET("/v1/find/*archive", v1_find)
