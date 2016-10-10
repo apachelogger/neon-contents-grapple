@@ -90,6 +90,7 @@ func (contents *Contents) parseLine(line string) (string, string) {
 
 	file = strings.TrimSpace(file)
 	location = strings.TrimSpace(location)
+
 	return file, location
 }
 
@@ -102,7 +103,12 @@ func (contents *Contents) processLine(line string, archive string, wg *sync.Wait
 	// fmt.Println(file, location)
 
 	err := boltDb.Batch(func(tx *bolt.Tx) error {
-		err := tx.Bucket([]byte(archive)).Put([]byte(file), []byte(location))
+		bucket := tx.Bucket([]byte(archive))
+		subBucket, err := bucket.CreateBucketIfNotExists([]byte(file))
+		if err != nil {
+			return err
+		}
+		err = subBucket.Put([]byte(location), nil)
 		return err
 	})
 	if err != nil {

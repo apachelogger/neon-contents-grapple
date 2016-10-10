@@ -30,17 +30,21 @@ func updateContents() {
 	runtime.GC() // Force a cleanup
 }
 
-func Find(archive string, pattern string) map[string]string {
-	m := make(map[string]string)
+func Find(archive string, pattern string) map[string][]string {
+	m := make(map[string][]string)
 
 	err := boltDb.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(archive))
-		b.ForEach(func(k, v []byte) error {
-			// fmt.Println(string(k))
-			matched := glob.Glob(pattern, string(k))
+		b.ForEach(func(path, v []byte) error {
+			matched := glob.Glob(pattern, string(path))
 			if matched {
-				fmt.Println(string(k), string(v))
-				m[string(k)] = string(v)
+				subBucket := b.Bucket(path)
+				var packages []string
+				subBucket.ForEach(func(pkg, v []byte) error {
+					packages = append(packages, string(pkg))
+					return nil
+				})
+				m[string(path)] = packages
 			}
 			return nil
 		})
