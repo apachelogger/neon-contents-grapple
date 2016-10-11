@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/boltdb/bolt"
+	"github.com/danwakefield/fnmatch"
 	"github.com/gin-gonic/gin"
 	"github.com/ryanuber/go-glob"
 
@@ -56,7 +57,7 @@ func Find(archive string, pattern string) map[string][]string {
 	err := boltDb.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(archive))
 		b.ForEach(func(path, v []byte) error {
-			matched := glob.Glob(pattern, string(path))
+			matched := fnmatch.Match(pattern, string(path), 0)
 			if matched {
 				subBucket := b.Bucket(path)
 				var packages []string
@@ -99,7 +100,6 @@ func v1_find(c *gin.Context) {
 		c.JSON(http.StatusOK, make(map[string]string))
 		return
 	}
-	fmt.Println(archive)
 	c.JSON(http.StatusOK, Find(archive, query))
 }
 
