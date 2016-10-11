@@ -24,8 +24,10 @@ import (
 	"bufio"
 	"compress/gzip"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -35,27 +37,27 @@ import (
 
 type Contents struct {
 	uri string
+	id  string
 }
 
 func NewContents(uri string) *Contents {
-	return &Contents{
+	contents := &Contents{
 		uri: uri,
 	}
+	contents.id = contents.getId()
+	return contents
 }
 
 func (contents *Contents) Get() error {
-	archive := contents.archive()
 	lastDate := []byte(nil)
 	err := boltDb.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("archives"))
-		lastDate = b.Get([]byte(archive))
+		lastDate = b.Get([]byte(contents.id))
 		return nil
 	})
 	if err != nil {
 		panic(err)
 	}
-
-	// lastDate, lastDateErr := db.HGet("archives", archive).Result()
 
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", contents.uri, nil)
@@ -75,17 +77,33 @@ func (contents *Contents) Get() error {
 		return nil
 	}
 
-	gzip, err := gzip.NewReader(resp.Body)
+	// Writer the body to file
+	// Reading from Body.Resp via Gzip and Bufio is substantially slower
+	// than first downloading the entire body and reading from local. I am
+	// not entirely sure why that is since bufio should make it fast :(
+	tmpfile, err := ioutil.TempFile("", "neon-contents-grapple")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmpfile.Name()) // clean up
+	defer tmpfile.Close()
+	_, err = io.Copy(tmpfile, resp.Body)
+	if err != nil {
+		return err
+	}
+	tmpfile.Seek(0, 0)
+
+	gzip, err := gzip.NewReader(bufio.NewReader(tmpfile))
 	if err != nil {
 		panic(err)
 	}
 	defer gzip.Close()
 
-	contents.process(bufio.NewReader(gzip), archive)
+	contents.process(bufio.NewReaderSize(gzip, 64*1024*1024), contents.id)
 
 	err = boltDb.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("archives"))
-		b.Put([]byte(archive), []byte(resp.Header.Get("Date")))
+		b.Put([]byte(contents.id), []byte(resp.Header.Get("Date")))
 		return nil
 	})
 	if err != nil {
@@ -114,16 +132,11 @@ func (contents *Contents) parseLine(line string) (string, string) {
 	return file, location
 }
 
-func (contents *Contents) processLine(line string, archive string, wg *sync.WaitGroup, sem chan bool) {
-	defer wg.Done()
-	defer func() { <-sem }()
-
+func (contents *Contents) processLine(line string) {
 	file, location := contents.parseLine(line)
-	// fmt.Println(archive)
-	// fmt.Println(file, location)
 
 	err := boltDb.Batch(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket([]byte(archive))
+		bucket := tx.Bucket([]byte(contents.id))
 		subBucket, err := bucket.CreateBucketIfNotExists([]byte(file))
 		if err != nil {
 			return err
@@ -136,8 +149,23 @@ func (contents *Contents) processLine(line string, archive string, wg *sync.Wait
 	}
 }
 
-func (contents *Contents) process(reader *bufio.Reader, hash string) {
+func (contents *Contents) findStart(reader *bufio.Reader) bool {
 	foundStart := false
+	var line string
+	var err error
+	for !foundStart {
+		line, err = reader.ReadString('\n')
+		if err == io.EOF {
+			break
+		} else if err != nil {
+			panic(err)
+		}
+		foundStart = strings.HasPrefix(line, "FILE") && strings.Contains(line, "LOCATION")
+	}
+	return foundStart
+}
+
+func (contents *Contents) process(reader *bufio.Reader, hash string) {
 	err := boltDb.Update(func(tx *bolt.Tx) error {
 		_, err := tx.CreateBucketIfNotExists([]byte(hash))
 		return err
@@ -145,35 +173,50 @@ func (contents *Contents) process(reader *bufio.Reader, hash string) {
 	if err != nil {
 		panic(err)
 	}
-	var wg sync.WaitGroup
-	// Semaphore concurrent lines processing
-	// Assuming the longer lines are of the form
-	//   /usr/share/locale/ro/LC_MESSAGES/plasma_applet_org.kde.plasma.quickshare.mo
-	// they'd be 75 characters long, assuming each character is a byte we'd want
-	// to fill about 64 MiB worth of lines.
-	// NB: actual consumption will be much higher due to pending bolt Batches,
-	//     GC and so forth.
-	sem := make(chan bool, 64*1024*1024/75)
-	for {
-		line, err := reader.ReadString('\n')
-		if err == io.EOF {
-			break
-		} else if err != nil {
+
+	if !contents.findStart(reader) {
+		return // file seems invalid
+	}
+
+	input := make(chan string)
+
+	go func() {
+		var line string
+		var err error
+		for {
+			line, err = reader.ReadString('\n')
+			if err == nil {
+				input <- line
+				continue
+			} else if err == io.EOF {
+				break
+			}
 			panic(err)
 		}
-		if !foundStart {
-			foundStart = strings.HasPrefix(line, "FILE") && strings.Contains(line, "LOCATION")
-			continue
-		}
-		wg.Add(1)
-		sem <- true
-		go contents.processLine(line, hash, &wg, sem)
+		close(input)
+	}()
+
+	var processorWg sync.WaitGroup
+	for i := 0; i < 1024; i++ {
+		// fmt.Println("creating worker ", strconv.Itoa(i))
+		processorWg.Add(1)
+		go contents.readLine(input, &processorWg, i)
 	}
-	wg.Wait()
+
+	processorWg.Wait()
+
 	boltDb.Sync()
 }
 
-func (contents *Contents) archive() string {
+func (contents *Contents) readLine(input chan string, wg *sync.WaitGroup, i int) {
+	defer wg.Done()
+	for line := range input {
+		// fmt.Println("worker " + strconv.Itoa(i) + " " + line)
+		contents.processLine(line)
+	}
+}
+
+func (contents *Contents) getId() string {
 	u, err := url.Parse(contents.uri)
 	if err != nil {
 		panic(err)
