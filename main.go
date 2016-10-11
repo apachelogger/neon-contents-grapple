@@ -43,12 +43,22 @@ var memprofile = flag.String("memprofile", "", "write memory profile to this fil
 
 var db = NewDatabase()
 var boltDb = db.bolt
+var pools = make(map[string][]string)
 
 func updateContents() {
-	fmt.Println("updating")
-	NewContents("http://archive.neon.kde.org/user/dists/xenial/main/Contents-amd64.gz").Get()
-	NewContents("http://archive.ubuntu.com/ubuntu/dists/xenial/Contents-amd64.gz").Get()
-	runtime.GC() // Force a cleanup
+	fmt.Println("updating neon")
+	start := time.Now()
+	neon := NewContents("http://archive.neon.kde.org/user/dists/xenial/main/Contents-amd64.gz")
+	neon.Get()
+	fmt.Println("neon took ", time.Since(start))
+	fmt.Println("updating ubuntu")
+	ubuntu := NewContents("http://archive.ubuntu.com/ubuntu/dists/xenial/Contents-amd64.gz")
+	start = time.Now()
+	ubuntu.Get()
+	fmt.Println("ubuntu took ", time.Since(start))
+	pools["neon"] = []string{neon.id, ubuntu.id}
+}
+
 }
 
 func Find(archive string, pattern string) map[string][]string {
@@ -82,6 +92,15 @@ func Find(archive string, pattern string) map[string][]string {
 func stringInSlice(a string, list []string) bool {
 	for _, b := range list {
 		if b == a {
+			return true
+		}
+	}
+	return false
+}
+
+func isPool(a string) bool {
+	for k := range pools {
+		if a == k {
 			return true
 		}
 	}
