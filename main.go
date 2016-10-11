@@ -26,7 +26,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"runtime"
 	"runtime/pprof"
 	"strings"
 	"time"
@@ -34,7 +33,6 @@ import (
 	"github.com/boltdb/bolt"
 	"github.com/danwakefield/fnmatch"
 	"github.com/gin-gonic/gin"
-	"github.com/ryanuber/go-glob"
 
 	_ "net/http/pprof"
 )
