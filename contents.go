@@ -44,7 +44,7 @@ func NewContents(uri string) *Contents {
 	contents := &Contents{
 		uri: uri,
 	}
-	contents.id = contents.getId()
+	contents.id = contents.getID()
 	return contents
 }
 
@@ -216,7 +216,7 @@ func (contents *Contents) readLine(input chan string, wg *sync.WaitGroup, i int)
 	}
 }
 
-func (contents *Contents) getId() string {
+func (contents *Contents) getID() string {
 	u, err := url.Parse(contents.uri)
 	if err != nil {
 		panic(err)
