@@ -131,10 +131,6 @@ func main() {
 		panic(err)
 	}
 
-	go func() {
-		log.Println(http.ListenAndServe("localhost:6060", nil))
-	}()
-
 	updateContents()
 	updateTicker := time.NewTicker(3 * time.Hour)
 	go func() {
@@ -145,6 +141,9 @@ func main() {
 	}()
 
 	if *memprofile != "" {
+		go func() {
+			log.Println(http.ListenAndServe("localhost:6060", nil))
+		}()
 		f, err := os.Create(*memprofile)
 		if err != nil {
 			log.Fatal(err)
