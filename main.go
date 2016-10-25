@@ -136,7 +136,7 @@ func main() {
 	}()
 
 	updateContents()
-	updateTicker := time.NewTicker(30 * time.Minute)
+	updateTicker := time.NewTicker(3 * time.Hour)
 	go func() {
 		for {
 			<-updateTicker.C
