@@ -123,8 +123,6 @@ func v1_find(c *gin.Context) {
 func main() {
 	flag.Parse()
 
-	fmt.Printf("Hello, world.\n")
-
 	err := boltDb.Update(func(tx *bolt.Tx) error {
 		_, err := tx.CreateBucketIfNotExists([]byte("archives"))
 		return err
