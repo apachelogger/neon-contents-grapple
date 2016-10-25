@@ -197,7 +197,7 @@ func (contents *Contents) process(reader *bufio.Reader, hash string) {
 	}()
 
 	var processorWg sync.WaitGroup
-	for i := 0; i < 1024; i++ {
+	for i := 0; i < 2048; i++ {
 		// fmt.Println("creating worker ", strconv.Itoa(i))
 		processorWg.Add(1)
 		go contents.readLine(input, &processorWg, i)
