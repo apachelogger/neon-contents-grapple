@@ -24,3 +24,13 @@
 
 - in PWD my.db is created for the database, so make sure you are in a suitable PWD
 - binary should be run through systemd
+
+# Deploy
+
+to deploy updates to KDE (you need access to neonapis user)
+
+- `gom build`
+- `bundle install`
+- `bundle exec ./deploy.rb`
+
+the deploy.rb helper will rsync the built binary and restart the systemd service.
