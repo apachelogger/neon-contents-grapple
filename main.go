@@ -158,5 +158,11 @@ func main() {
 	router := gin.Default()
 	router.GET("/v1/archives", v1_archives)
 	router.GET("/v1/find/*archive", v1_find)
-	router.Run()
+
+	port := os.Getenv("PORT")
+	if len(port) <= 0 {
+		port = "8080"
+	}
+
+	router.Run("localhost:" + port)
 }
