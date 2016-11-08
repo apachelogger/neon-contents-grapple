@@ -28,6 +28,7 @@ import (
 	"os"
 	"runtime/pprof"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/boltdb/bolt"
@@ -57,6 +58,33 @@ func updateContents() {
 	pools["neon"] = []string{neon.id, ubuntu.id}
 }
 
+
+type FindAction struct {
+	bucket *bolt.Bucket
+	path   []byte
+}
+
+type FindResult struct {
+	path     string
+	packages []string
+}
+
+func find_it(pattern string, input chan *FindAction, output chan *FindResult, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for action := range input {
+		path := string(action.path)
+		matched := fnmatch.Match(pattern, path, 0)
+		if matched {
+			// TODO could just wrap this in a struct
+			subBucket := action.bucket.Bucket(action.path)
+			var packages []string
+			subBucket.ForEach(func(pkg, v []byte) error {
+				packages = append(packages, string(pkg))
+				return nil
+			})
+			output <- &FindResult{path: string(path), packages: packages}
+		}
+	}
 }
 
 func Find(archive string, pattern string) map[string][]string {
@@ -64,19 +92,35 @@ func Find(archive string, pattern string) map[string][]string {
 
 	err := boltDb.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(archive))
-		b.ForEach(func(path, v []byte) error {
-			matched := fnmatch.Match(pattern, string(path), 0)
-			if matched {
-				subBucket := b.Bucket(path)
-				var packages []string
-				subBucket.ForEach(func(pkg, v []byte) error {
-					packages = append(packages, string(pkg))
-					return nil
-				})
-				m[string(path)] = packages
-			}
-			return nil
-		})
+
+		input := make(chan *FindAction)
+		output := make(chan *FindResult, 2048) // Cache up to 4 times as many results.
+
+		go func() {
+			b.ForEach(func(path, v []byte) error {
+				input <- &FindAction{bucket: b, path: path}
+				return nil
+			})
+			close(input)
+		}()
+
+		var findWg sync.WaitGroup
+		for i := 0; i < 512; i++ {
+			findWg.Add(1)
+			go find_it(pattern, input, output, &findWg)
+		}
+
+		go func() {
+			// Close output once everything is read. This will make the read loop exit
+			// once everything is read.
+			findWg.Wait()
+			close(output)
+		}()
+
+		// Read results until
+		for result := range output {
+			m[result.path] = result.packages
+		}
 
 		return nil
 	})
