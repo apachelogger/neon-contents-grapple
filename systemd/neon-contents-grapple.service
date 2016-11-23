@@ -8,5 +8,7 @@ Environment=PORT=9100
 Environment=GOMAXPROCS=2
 ExecStart=/home/neonapis/bin/neon-contents-grapple
 Restart=always
+
+[Install]
 WantedBy=default.target
 
