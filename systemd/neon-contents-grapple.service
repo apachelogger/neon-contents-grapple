@@ -5,7 +5,7 @@ Description=Neon Contents Grapple
 #Type=simple
 WorkingDirectory=/home/neonapis/data
 Environment=PORT=9100
-Environment=GOMAXPROCS=2
+Environment=GOMAXPROCS=4
 ExecStart=/home/neonapis/bin/neon-contents-grapple
 Restart=always
 
