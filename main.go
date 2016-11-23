@@ -58,6 +58,28 @@ func updateContents() {
 	pools["neon"] = []string{neon.id, ubuntu.id}
 }
 
+func testEq(a, b []byte) bool {
+
+	if a == nil && b == nil {
+		return true
+	}
+
+	if a == nil || b == nil {
+		return false
+	}
+
+	if len(a) != len(b) {
+		return false
+	}
+
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+
+	return true
+}
 
 type FindAction struct {
 	bucket *bolt.Bucket
@@ -153,9 +175,42 @@ func v1_archives(c *gin.Context) {
 	c.JSON(http.StatusOK, db.GetKeys("archives"))
 }
 
+func v1_pools(c *gin.Context) {
+	c.JSON(http.StatusOK, pools)
+}
+
 func v1_find(c *gin.Context) {
 	query := c.Query("q")
 	archive := strings.TrimPrefix(c.Param("archive"), "/")
+	if len(query) < 3 {
+		// TODO: len should be of a santizied query!
+		c.JSON(http.StatusForbidden, "Overly generic query")
+		return
+	}
+	fmt.Println(archive)
+	for pool, archives := range pools {
+		fmt.Println(pool)
+		if archive == pool {
+			var matches map[string][]string
+			for _, a := range archives {
+				locals := Find(a, query)
+				if matches == nil {
+					matches = locals
+					continue
+				}
+				for k, v := range locals {
+					fmt.Println(v)
+					if _, exist := matches[k]; exist {
+						fmt.Println("file exist" + k)
+						continue
+					}
+					matches[k] = v
+				}
+			}
+			c.JSON(http.StatusOK, matches)
+			return
+		}
+	}
 	// Security... only allow querying actual archives. Not arbitrary buckets.
 	if !stringInSlice(archive, db.GetKeys("archives")) {
 		c.JSON(http.StatusOK, make(map[string]string))
@@ -201,6 +256,7 @@ func main() {
 
 	router := gin.Default()
 	router.GET("/v1/archives", v1_archives)
+	router.GET("/v1/pools", v1_pools)
 	router.GET("/v1/find/*archive", v1_find)
 
 	port := os.Getenv("PORT")
