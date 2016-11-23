@@ -171,14 +171,52 @@ func isPool(a string) bool {
 	return false
 }
 
+/**
+ * @api {get} /archives Archives
+ *
+ * @apiGroup Contents
+ * @apiName v1_archives
+ *
+ * @apiDescription Lists known archives. An archives are identified by the BaseUrls
+ *   path of their Contents file (i.e. hostname+dirpath).
+ *
+ * @apiSuccessExample {json} Success-Response:
+ *   ["archive.neon.kde.org/user/dists/xenial","archive.ubuntu.com/ubuntu/dists/xenial"]
+ */
 func v1_archives(c *gin.Context) {
 	c.JSON(http.StatusOK, db.GetKeys("archives"))
 }
 
+/**
+ * @api {get} /pools Pools
+ *
+ * @apiGroup Contents
+ * @apiName v1_pools
+ *
+ * @apiDescription List known pools. A Pool is an ordered list of archives
+ *   comprising a well-known pool of archives. Notably the 'neon' pool is
+ *   a neon archive and an ubuntu archive.
+ *
+ * @apiSuccessExample {json} Success-Response:
+ *   {"neon":["archive.neon.kde.org/user/dists/xenial","archive.ubuntu.com/ubuntu/dists/xenial"]}
+ */
 func v1_pools(c *gin.Context) {
 	c.JSON(http.StatusOK, pools)
 }
 
+/**
+ * @api {get} /find/:archive?q=:query Find
+ * @apiParam {String} archive archive identifier to find in
+ * @apiParam {String} query POSIX fnmatch pattern to look for
+ *
+ * @apiGroup Contents
+ * @apiName v1_find
+ *
+ * @apiDescription Find packages matching a fnmatch pattern (i.e. glob)
+ *
+ * @apiSuccessExample {json} Success-Response:
+ *   {"usr/share/gir-1.0/AppStream-1.0.gir":["libappstream-dev"]}
+ */
 func v1_find(c *gin.Context) {
 	query := c.Query("q")
 	archive := strings.TrimPrefix(c.Param("archive"), "/")
@@ -255,6 +293,10 @@ func main() {
 	fmt.Println("Ready to rumble...")
 
 	router := gin.Default()
+	router.GET("/", func(c *gin.Context) {
+		c.Redirect(http.StatusMovedPermanently, "/doc")
+	})
+	router.StaticFS("/doc", http.Dir("contents-doc"))
 	router.GET("/v1/archives", v1_archives)
 	router.GET("/v1/pools", v1_pools)
 	router.GET("/v1/find/*archive", v1_find)

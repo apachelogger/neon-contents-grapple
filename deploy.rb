@@ -24,10 +24,29 @@ require 'net/ssh'
 bin = 'neon-contents-grapple'
 user = 'neonapis'
 host = 'darwini.kde.org'
-path = "/home/#{user}/bin/"
+home = "/home/#{user}"
+path = "#{home}/bin/"
+systemd = "#{home}/.config/systemd/user"
 
 system('rsync', '-avz', '--progress',
        '-e', 'ssh', bin, "#{user}@#{host}:#{path}") || raise
 
 system('ssh', "#{user}@#{host}",
+       "mkdir -p #{home}/.config/systemd/user") || raise
+system('rsync', '-avz', '--progress',
+       '-e', 'ssh', 'systemd/neon-contents-grapple.service',
+       "#{user}@#{host}:#{systemd}") || raise
+system('ssh', "#{user}@#{host}",
+       'systemctl --user daemon-reload') || raise
+system('ssh', "#{user}@#{host}",
        'systemctl --user restart neon-contents-grapple.service') || raise
+
+# optional, exit if docs fail
+system('node_modules/.bin/apidoc',
+       '-e', 'node_modules',
+       '-e', 'vendor',
+       '-e', 'contents-doc',
+       '-o', 'contents-doc', '--debug') || exit
+
+system('rsync', '-avz', '--progress',
+       '-e', 'ssh', 'contents-doc', "#{user}@#{host}:#{home}/data/")
