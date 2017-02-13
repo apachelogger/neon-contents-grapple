@@ -1,7 +1,0 @@
-{
-  "name": "neon-contents-grapple",
-  "version": "0.0.1",
-  "description": "neon file finder api",
-  "title": "KDE neon Contents API",
-  "url" : "https://contents.neon.kde.org/v1"
-}
